@@ -23,6 +23,11 @@ end)
 local searched
 local selected
 
+local last_command_side = "1"
+local last_commands = {}
+
+local default_view = modstorage:get_int("/settings: default_view") == 1
+
 local localplayer
 minetest.register_on_connect(function()
 	localplayer = minetest.localplayer
@@ -54,8 +59,6 @@ end
 local function save()
 	modstorage:set_string(world_name, minetest.serialize(waypoints))
 end
-
-local default_view = modstorage:get_int("/settings: default_view") == 1
 
 local function show_formspec(page, data)
 	local f = ""
@@ -134,6 +137,28 @@ local function show_formspec(page, data)
 				minetest.formspec_escape(waypoints[selected].name).."?]"..
 			"button[2.5,1.5;1,1;y;YES]"..
 			"button[0.5,1.5;1,1;n;NO]"
+	elseif page == "chatcommand" then
+		f = f..
+			"size[8,6]"..
+			"label[0.5,0.5;%s will be changed to the selected waypoint's position]"..
+			"dropdown[1,3;0.5;side;/,.;"..last_command_side.."]"..
+			"field[1.7,3.2;3.8,1;command;;"..(data or "").."]"..
+			"field_close_on_enter[command;false]"..
+			"dropdown[5,3;3;old;"
+		if #last_commands > 0 then
+			for i = #last_commands, #last_commands-8, -1 do
+				if i <= 0 then
+					break
+				end
+				f = f..last_commands[i]..","
+			end
+		else
+			f = f..","
+		end
+		f = f:sub(1, -2).. -- Cut away the last ",".
+			";0]"..
+			"button[4,5.5;2,1;cancel;Cancel]"..
+			"button_exit[6,5.5;2,1;run;Run]"
 	elseif page == "settings" then
 		f = f..
 			"size[8,6]"..
@@ -247,6 +272,40 @@ minetest.register_on_formspec_input(function(formname, fields)
 			minetest.after(0.061, show_formspec, "main")
 		else
 			show_formspec("main")
+		end
+	elseif page == "chatcommand" then
+		if fields.run then
+			last_command_side = fields.side == "/" and "1" or "2"
+			for i = 1, #last_commands do
+				if last_commands[i] == fields.side..fields.command then
+					table.remove(last_commands, i)
+				end
+			end
+			last_commands[#last_commands+1] = fields.side..fields.command
+			local f = fields.command:find(" ")
+			local cmd, param
+			if not f then
+				cmd = fields.command
+				param = ""
+			else
+				cmd = fields.command:sub(1, f-1)
+				param = fields.command:sub(f+1)
+				local pos = minetest.pos_to_string(waypoints[selected].pos):sub(2,-2)
+				param = param:format(pos)
+			end
+			if fields.side == "/" then
+				minetest.run_server_chatcommand(cmd, param)
+			elseif fields.side == "." then
+				local _, msg = minetest.registered_chatcommands[cmd].func(param)
+				minetest.display_chat_message(msg)
+			end
+		elseif fields.cancel then
+			show_formspec("main")
+		elseif fields.quit then
+			minetest.after(0.061, show_formspec, "main")
+		elseif fields.old then
+			last_command_side = fields.old:sub(1, 1) == "/" and "1" or "2"
+			show_formspec("chatcommand", fields.old:sub(2))
 		end
 	elseif page == "settings" then
 		if fields.default_view then
