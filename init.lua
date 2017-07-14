@@ -29,7 +29,7 @@ minetest.register_on_connect(function()
 end)
 
 local function check_color(s)
-	if type(s) ~= "string" or #s ~= 7 or s:sub(1) ~= "#" then
+	if type(s) ~= "string" or #s ~= 7 or s:sub(1, 1) ~= "#" then
 		return false
 	end
 	local chars = {
@@ -51,6 +51,10 @@ local function check_color(s)
 	return true
 end
 
+local function save()
+	modstorage:set_string(world_name, minetest.serialize(waypoints))
+end
+
 local function show_formspec(page, data)
 	local f = ""
 	if page == "main" then
@@ -68,18 +72,57 @@ local function show_formspec(page, data)
 			"button[0,2;2,1;edit;Edit]"..
 			"button[0,3;2,1;delete;Delete]"..
 			"button_exit[0,4;2,1;teleport;Teleport to]"..
-			"button_exit[0,8;2,1;search;Search]"..
+			"button[0,5;2,1;chatcommand;Run Command]"..
+			"button_exit[0,7;2,1;search;Search]"..
+			"button[0,8;2,1;settings;Settings]"..
 			"button_exit[0,9;2,1;exit;Exit]"..
 			"container_end[]"
 	elseif page == "add" then
 		f = f..
 			"size[8,6]"..
-			"field[0.5,3.5;3,1;name;Name;]"..
+			"field[0.5,0.5;3,1;name;Name;"..
+				((data and
+					--[[((check_color(data.color) and
+						minetest.colorize(data.color, data.name))
+					or]] data.name)--)
+				or "")..
+			"]"..
+			"field[0.5,1.5;1.5,1;color;Color;"..((data and data.color) or "").."]"..
+			"field[7,1;1.5,1;x;X;"..((data and tostring(data.x)) or "").."]"..
+			"field[7,2;1.5,1;y;Y;"..((data and tostring(data.y)) or "").."]"..
+			"field[7,3;1.5,1;z;Z;"..((data and tostring(data.z)) or "").."]"..
 			"field_close_on_enter[name;false]"..
-			"field[4,3.5;1.5,1;color;Color;"..((data and data.color) or "").."]"..
 			"field_close_on_enter[color;false]"..
-			((data and data.color and "box[5.5,3.5;1,1;"..data.color.."]") or "")..
-			"button[4,1;2,1;current_pos;take current pos]"..
+			"field_close_on_enter[x;false]"..
+			"field_close_on_enter[y;false]"..
+			"field_close_on_enter[z;false]"..
+			"box[0.8,1;0.7,0.2;"..((data and check_color(data.color) and data.color)
+				or "#FFFFFF").."]"..
+			"button[5,4;3,1;current_pos;take current pos]"..
+			"button[4,5.5;2,1;cancel;Cancel]"..
+			"button[6,5.5;2,1;add;Add]"
+	elseif page == "edit" then
+		f = f..
+			"size[8,6]"..
+			"field[0.5,0.5;3,1;name;Name;"..
+				((data and
+					--[[((check_color(data.color) and
+						minetest.colorize(data.color, data.name))
+					or]] data.name)--)
+				or "")..
+			"]"..
+			"field[0.5,1.5;1.5,1;color;Color;"..((data and data.color) or "").."]"..
+			"field[7,1;1.5,1;x;X;"..((data and tostring(data.x)) or "").."]"..
+			"field[7,2;1.5,1;y;Y;"..((data and tostring(data.y)) or "").."]"..
+			"field[7,3;1.5,1;z;Z;"..((data and tostring(data.z)) or "").."]"..
+			"field_close_on_enter[name;false]"..
+			"field_close_on_enter[color;false]"..
+			"field_close_on_enter[x;false]"..
+			"field_close_on_enter[y;false]"..
+			"field_close_on_enter[z;false]"..
+			"box[0.8,1;0.7,0.2;"..((data and check_color(data.color) and data.color)
+				or "#FFFFFF").."]"..
+			"button[5,4;3,1;current_pos;take current pos]"..
 			"button[4,5.5;2,1;cancel;Cancel]"..
 			"button[6,5.5;2,1;add;Add]"
 	elseif page == "delete" then
@@ -121,6 +164,12 @@ minetest.register_on_formspec_input(function(formname, fields)
 	if page == "main" then
 		if fields.add then
 			show_formspec("add")
+		elseif fields.edit then
+			local data = table.copy(waypoints[selected])
+			data.x = data.pos.x
+			data.y = data.pos.y
+			data.z = data.pos.z
+			show_formspec("edit", data)
 		elseif fields.delete then
 			show_formspec("delete")
 		elseif fields.teleport then
@@ -136,7 +185,13 @@ minetest.register_on_formspec_input(function(formname, fields)
 		end
 	elseif page == "add" then
 		if fields.add or (fields.key_enter == "true" and fields.key_enter_field == "name") then
-			waypoints[#waypoints+1] = {name = fields.name, color = fields.color, pos = {x=10,y=9,z=-20}}
+			waypoints[#waypoints+1] = {
+				name = fields.name,
+				color = fields.color,
+				pos = vector.new(tonumber(fields.x), tonumber(fields.y),
+						tonumber(fields.z))
+			}
+			save()
 			selected = #waypoints
 			show_formspec("main")
 		elseif fields.cancel then
@@ -144,15 +199,37 @@ minetest.register_on_formspec_input(function(formname, fields)
 		elseif fields.quit then
 			minetest.after(0.061, show_formspec, "main")
 		elseif fields.key_enter == "true" and fields.key_enter_field == "color" then
-			if not check_color(fields.color) then
-				fields.color = false
-			end
-			print("bla")
-			show_formspec("add", {color = fields.color})
+			show_formspec("add", fields)
+		elseif fields.current_pos then
+			local pos = vector.round(localplayer:get_pos())
+			fields.x, fields.y, fields.z = pos.x, pos.y, pos.z
+			show_formspec("add", fields)
+		end
+	elseif page == "edit" then
+		if fields.add or (fields.key_enter == "true" and fields.key_enter_field == "name") then
+			waypoints[selected] = {
+				name = fields.name,
+				color = fields.color,
+				pos = vector.new(tonumber(fields.x), tonumber(fields.y),
+						tonumber(fields.z))
+			}
+			save()
+			show_formspec("main")
+		elseif fields.cancel then
+			show_formspec("main")
+		elseif fields.quit then
+			minetest.after(0.061, show_formspec, "main")
+		elseif fields.key_enter == "true" and fields.key_enter_field == "color" then
+			show_formspec("edit", fields)
+		elseif fields.current_pos then
+			local pos = vector.round(localplayer:get_pos())
+			fields.x, fields.y, fields.z = pos.x, pos.y, pos.z
+			show_formspec("edit", fields)
 		end
 	elseif page == "delete" then
 		if fields.y then
 			table.remove(waypoints, selected)
+			save()
 		end
 		-- Bring back to main page.
 		if fields.quit then
@@ -162,10 +239,6 @@ minetest.register_on_formspec_input(function(formname, fields)
 		end
 	end
 	return true
-end)
-
-minetest.register_on_shutdown(function()
-	modstorage:set_string(world_name, minetest.serialize(waypoints))
 end)
 
 
