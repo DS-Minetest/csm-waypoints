@@ -10,9 +10,9 @@ __  _  _______  ___.__.______   ____ |__| _____/  |_  ______
 local load_time_start = os.clock()
 local modname = minetest.get_current_modname()
 
-local default_view = true -- Set this to true if you want the default mod look.
 
 local modstorage = core.get_mod_storage()
+
 local world_name
 local waypoints
 worldname.register_on_get(function()
@@ -54,6 +54,8 @@ end
 local function save()
 	modstorage:set_string(world_name, minetest.serialize(waypoints))
 end
+
+local default_view = modstorage:get_int("/settings: default_view") == 1
 
 local function show_formspec(page, data)
 	local f = ""
@@ -124,7 +126,7 @@ local function show_formspec(page, data)
 				or "#FFFFFF").."]"..
 			"button[5,4;3,1;current_pos;take current pos]"..
 			"button[4,5.5;2,1;cancel;Cancel]"..
-			"button[6,5.5;2,1;add;Add]"
+			"button[6,5.5;2,1;submit;Submit]"
 	elseif page == "delete" then
 		f = f..
 			"size[4,2]"..
@@ -132,6 +134,12 @@ local function show_formspec(page, data)
 				minetest.formspec_escape(waypoints[selected].name).."?]"..
 			"button[2.5,1.5;1,1;y;YES]"..
 			"button[0.5,1.5;1,1;n;NO]"
+	elseif page == "settings" then
+		f = f..
+			"size[8,6]"..
+			"checkbox[0.8,0.5;default_view;Default View;"..tostring(default_view).."]"..
+			"button[4,5.5;2,1;cancel;Cancel]"..
+			"button[6,5.5;2,1;save;Save]"
 	end
 	if default_view then
 		f = f..
@@ -175,6 +183,10 @@ minetest.register_on_formspec_input(function(formname, fields)
 		elseif fields.teleport then
 			minetest.run_server_chatcommand("teleport",
 					minetest.pos_to_string(waypoints[selected].pos):sub(2, -2))
+		elseif fields.chatcommand then
+			show_formspec("chatcommand")
+		elseif fields.settings then
+			show_formspec("settings")
 		elseif fields.list then
 			if fields.list:sub(1, 4) == "CHG:" then
 				selected = tonumber(fields.list:sub(5))
@@ -206,7 +218,7 @@ minetest.register_on_formspec_input(function(formname, fields)
 			show_formspec("add", fields)
 		end
 	elseif page == "edit" then
-		if fields.add or (fields.key_enter == "true" and fields.key_enter_field == "name") then
+		if fields.submit or (fields.key_enter == "true" and fields.key_enter_field == "name") then
 			waypoints[selected] = {
 				name = fields.name,
 				color = fields.color,
@@ -231,10 +243,23 @@ minetest.register_on_formspec_input(function(formname, fields)
 			table.remove(waypoints, selected)
 			save()
 		end
-		-- Bring back to main page.
 		if fields.quit then
 			minetest.after(0.061, show_formspec, "main")
 		else
+			show_formspec("main")
+		end
+	elseif page == "settings" then
+		if fields.default_view then
+			default_view = fields.default_view == "true"
+			show_formspec("settings")
+		elseif fields.cancel then
+			default_view = modstorage:get_int("/settings: default_view") == 1
+			show_formspec("main")
+		elseif fields.quit then
+			default_view = modstorage:get_int("/settings: default_view") == 1
+			minetest.after(0.061, show_formspec, "main")
+		elseif fields.save then
+			modstorage:set_int("/settings: default_view", (default_view and 1) or 0)
 			show_formspec("main")
 		end
 	end
