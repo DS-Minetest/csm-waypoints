@@ -27,6 +27,7 @@ local last_command_side = "1"
 local last_commands = {}
 
 local default_view = modstorage:get_int("/settings: default_view") == 1
+local deathwaypoints = modstorage:get_int("/settings: deathwaypoints") == 1
 
 local localplayer
 minetest.register_on_connect(function()
@@ -163,6 +164,7 @@ local function show_formspec(page, data)
 		f = f..
 			"size[8,6]"..
 			"checkbox[0.8,0.5;default_view;Default View;"..tostring(default_view).."]"..
+			"checkbox[0.8,1.5;deathwaypoints;make Waypoints on Death;"..tostring(deathwaypoints).."]"..
 			"button[4,5.5;2,1;cancel;Cancel]"..
 			"button[6,5.5;2,1;save;Save]"
 	end
@@ -193,7 +195,7 @@ minetest.register_on_formspec_input(function(formname, fields)
 		return
 	end
 	local page = formname:sub(11)
-	print(dump(fields))
+	--~ print(dump(fields))
 	if page == "main" then
 		if fields.add then
 			show_formspec("add")
@@ -311,6 +313,9 @@ minetest.register_on_formspec_input(function(formname, fields)
 		if fields.default_view then
 			default_view = fields.default_view == "true"
 			show_formspec("settings")
+		elseif fields.deathwaypoints then
+			deathwaypoints = fields.deathwaypoints == "true"
+			show_formspec("settings")
 		elseif fields.cancel then
 			default_view = modstorage:get_int("/settings: default_view") == 1
 			show_formspec("main")
@@ -319,10 +324,23 @@ minetest.register_on_formspec_input(function(formname, fields)
 			minetest.after(0.061, show_formspec, "main")
 		elseif fields.save then
 			modstorage:set_int("/settings: default_view", (default_view and 1) or 0)
+			modstorage:set_int("/settings: deathwaypoints", (deathwaypoints and 1) or 0)
 			show_formspec("main")
 		end
 	end
 	return true
+end)
+
+-- Automatically set waypoints at deathpoints.
+minetest.register_on_death(function()
+	if not deathwaypoints then
+		return
+	end
+	waypoints[#waypoints+1] = {
+		name = "death_"..os.date("%Y%m%d%H%M%S"),
+		color = "#AF0000",
+		pos = vector.round(localplayer:get_pos())
+	}
 end)
 
 
